@@ -1,0 +1,107 @@
+# Note: TARGETPLATFORM is set by Docker BuildKit
+ARG TARGETPLATFORM=linux/amd64
+ARG ROS_DISTRO=jazzy
+ARG TARGET=base
+
+####################################################################################################
+FROM --platform=$TARGETPLATFORM crresearchplatformdtweu.azurecr.io/common_dev:latest AS framos
+
+# Re-declare so it’s available in later instructions
+ARG TARGETPLATFORM
+RUN echo "TARGETPLATFORM is ${TARGETPLATFORM}"
+
+LABEL TARGETPLATFORM=${TARGETPLATFORM}
+LABEL maintainer="jonas.rangsjo@vaderstad.com"
+LABEL description="Framos image for ResearchPlatform"
+
+ARG USERNAME=ubuntu
+ARG UID=1000
+ARG GID=1000
+
+#Okay for a docker but dont do this on your desktop machine
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# Allow for non-interactive installation of packages
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update -q && \
+    apt-get install -y linux-headers-$(uname -r) && \
+    apt install gcc g++ cmake libglfw3-dev libgtk-3-dev git libssl-dev libusb-1.0-0-dev pkg-config -y && \
+    apt install libgl1-mesa-dev libglu1-mesa-dev -y
+
+
+# Set FRAMOS_SDK_LINK and LIBSSL_LINK based on TARGETPLATFORM
+ARG FRAMOS_SDK_LINK_ARM64="https://www.framos.com/framos3d/D400e/Software/Latest/FRAMOS_D400e_Software_Package_Linux64_ARM_latest.tar.gz"
+ARG FRAMOS_SDK_LINK_AMD64="https://www.framos.com/framos3d/D400e/Software/Latest/FRAMOS_D400e_Software_Package_Linux64_x64_latest.tar.gz"
+ARG LIBSSL_LINK_ARM64="https://launchpad.net/ubuntu/+source/openssl/1.1.1f-1ubuntu2/+build/19186413/+files/libssl1.1_1.1.1f-1ubuntu2_arm64.deb"
+ARG LIBSSL_LINK_AMD64="https://launchpad.net/ubuntu/+source/openssl/1.1.1f-1ubuntu2/+build/19186412/+files/libssl1.1_1.1.1f-1ubuntu2_amd64.deb"
+
+# Set environment variables based on platform
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
+    export FRAMOS_SDK_LINK="$FRAMOS_SDK_LINK_ARM64"; \
+    export LIBSSL_LINK="$LIBSSL_LINK_ARM64"; \
+    else \
+    export FRAMOS_SDK_LINK="$FRAMOS_SDK_LINK_AMD64"; \
+    export LIBSSL_LINK="$LIBSSL_LINK_AMD64"; \
+    fi && \
+    echo "FRAMOS_SDK_LINK=$FRAMOS_SDK_LINK" >> /etc/environment && \
+    echo "LIBSSL_LINK=$LIBSSL_LINK" >> /etc/environment
+
+# Source the environment variables in subsequent RUN steps
+ENV FRAMOS_SDK_LINK=${FRAMOS_SDK_LINK_AMD64}
+ENV LIBSSL_LINK=${LIBSSL_LINK_AMD64}
+
+# Install the Camera Suite
+RUN mkdir -p /temp && \
+    echo "Installing for ${TARGETPLATFORM} from ${FRAMOS_SDK_LINK}" && \
+    wget ${FRAMOS_SDK_LINK} -O /temp/FRAMOS_D400e_Software_Package.tar.gz && \
+    cd /temp && \
+    tar -xzf FRAMOS_D400e_Software_Package.tar.gz && \
+    cd FRAMOS_D400e_Software_Package && \
+    apt install ./FRAMOS_CameraSuite*.deb -y
+
+# install Libssl based on ARM or AMD64
+RUN cd /temp && \
+    wget ${LIBSSL_LINK} && \
+    dpkg -i libssl1.1_1.1.1f-1ubuntu2*.deb
+
+# Install intelrealsense framos version
+
+ENV PROJECT_RESOURCE_PATH="/framos/${TARGETPLATFORM}"
+RUN mkdir -p ${PROJECT_RESOURCE_PATH} && \
+    chown $USERNAME ${PROJECT_RESOURCE_PATH}
+
+RUN cd /temp/FRAMOS_D400e_Software_Package/ && \
+    dpkg-deb -x FRAMOS-librealsense2-2.55.10*.deb ./realsense2
+
+
+RUN mv /temp/FRAMOS_D400e_Software_Package/realsense2/usr/src/librealsense2 ${PROJECT_RESOURCE_PATH}
+RUN apt install v4l-utils -y
+RUN cd ${PROJECT_RESOURCE_PATH} && \
+    touch COLCON_IGNORE && \
+    cd librealsense2 && \
+    chmod 777 ./scripts/setup_udev_rules.sh && \
+    ./scripts/setup_udev_rules.sh
+
+# Manually set the environment variables for the Camera Suite
+ENV CAMERA_SUITE_SRC_PATH=/usr/src/framos/camerasuite
+ENV CAMERA_SUITE_PACKAGE=/usr/src/framos/camerasuite/CMakePackages
+ENV CAMERA_SUITE_INCLUDE_PATH=/usr/include/framos/camerasuite
+ENV CAMERA_SUITE_LIB_PATH=/usr/lib/framos/camerasuite
+ENV CAMERASUITE_EXAMPLE_DIR={CAMERA_SUITE_SRC_PATH}/Examples
+
+RUN echo "CAMERA_SUITE_PACKAGE is ${CAMERA_SUITE_PACKAGE}" && \
+    echo "CAMERA_SUITE_INCLUDE_PATH is ${CAMERA_SUITE_INCLUDE_PATH}" && \
+    cd ${PROJECT_RESOURCE_PATH}/librealsense2 \
+    && mkdir artifacts \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+        -DBUILD_GRAPHICAL_EXAMPLES=true \
+        -DBUILD_EXAMPLES=true \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DFORCE_RSUSB_BACKEND=false \
+        -DCHECK_FOR_UPDATES=OFF \
+        -DCMAKE_INSTALL_PREFIX="${PROJECT_RESOURCE_PATH}/librealsense2/artifacts" \
+    && make -j2 \
+    && make install

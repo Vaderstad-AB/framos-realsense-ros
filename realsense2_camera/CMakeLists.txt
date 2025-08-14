@@ -13,7 +13,7 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.5)
-project(realsense2_camera)
+project(framos_realsense2_camera)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -108,7 +108,7 @@ find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
-find_package(realsense2_camera_msgs REQUIRED)
+find_package(framos_realsense2_camera_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -117,11 +117,21 @@ find_package(tf2 REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(OpenCV REQUIRED COMPONENTS core)
 
-find_package(realsense2 2.55.1)
-if (BUILD_ACCELERATE_GPU_WITH_GLSL)
-  find_package(realsense2-gl 2.55.1)
+if(DEFINED LIBREALSENSE_PATH)
+  message(WARNING "Inside IF LIBREALSENSE_PATH")
+  find_package(realsense2 2.55.1 REQUIRED PATHS ${LIBREALSENSE_PATH}/lib/cmake/realsense2 NO_DEFAULT_PATH)
+else()
+  find_package(realsense2 2.55.1)
 endif()
-if(NOT realsense2_FOUND)
+# Ensure the package was found
+if (NOT TARGET realsense2::realsense2)
+    message(FATAL_ERROR "Target 'realsense2::realsense2' not found")
+endif()
+
+if (BUILD_ACCELERATE_GPU_WITH_GLSL)
+  find_package(framos_realsense2-gl 2.55.1)
+endif()
+if(NOT framos_realsense2_FOUND)
     message(FATAL_ERROR "\n\n Intel RealSense SDK 2.0 is missing, please install it from https://github.com/IntelRealSense/librealsense/releases\n\n")
 endif()
 
@@ -226,9 +236,9 @@ add_library(${PROJECT_NAME} SHARED
 )
 
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
-  set(link_libraries ${realsense2-gl_LIBRARY})
+  set(link_libraries ${framos_realsense2-gl_LIBRARY})
 else()
-  set(link_libraries ${realsense2_LIBRARY})
+  set(link_libraries ${framos_realsense2_LIBRARY})
 endif()
 
 list(APPEND link_libraries ${OpenCV_LIBS})  # add OpenCV libs to link_libraries
@@ -242,7 +252,7 @@ set(dependencies
   image_transport
   rclcpp
   rclcpp_components
-  realsense2_camera_msgs
+  framos_realsense2_camera_msgs
   std_msgs
   sensor_msgs
   nav_msgs
@@ -252,9 +262,9 @@ set(dependencies
 )
 
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
-  list(APPEND dependencies realsense2-gl)
+  list(APPEND dependencies framos_realsense2-gl)
 else()
-  list(APPEND dependencies realsense2)
+  list(APPEND dependencies framos_realsense2)
 endif()
 
 ament_target_dependencies(${PROJECT_NAME}
@@ -262,15 +272,15 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 
 rclcpp_components_register_node(${PROJECT_NAME}
-  PLUGIN "realsense2_camera::RealSenseNodeFactory"
-  EXECUTABLE realsense2_camera_node
+  PLUGIN "framos_realsense2_camera::RealSenseNodeFactory"
+  EXECUTABLE framos_realsense2_camera_node
 )
 
 if(BUILD_TOOLS)
 
   rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "rs2_ros::tools::frame_latency::FrameLatencyNode"
-  EXECUTABLE realsense2_frame_latency_node
+  EXECUTABLE framos_realsense2_frame_latency_node
   )
 
 endif()

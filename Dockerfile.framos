@@ -76,10 +76,11 @@ RUN cd /temp/FRAMOS_D400e_Software_Package/ && \
 
 
 RUN mv /temp/FRAMOS_D400e_Software_Package/realsense2/usr/src/librealsense2 ${PROJECT_RESOURCE_PATH}
+RUN mv ${PROJECT_RESOURCE_PATH}/librealsense2 ${PROJECT_RESOURCE_PATH}/framos
 RUN apt install v4l-utils -y
 RUN cd ${PROJECT_RESOURCE_PATH} && \
     touch COLCON_IGNORE && \
-    cd librealsense2 && \
+    cd framos && \
     chmod 777 ./scripts/setup_udev_rules.sh && \
     ./scripts/setup_udev_rules.sh
 
@@ -92,7 +93,7 @@ ENV CAMERASUITE_EXAMPLE_DIR={CAMERA_SUITE_SRC_PATH}/Examples
 
 RUN echo "CAMERA_SUITE_PACKAGE is ${CAMERA_SUITE_PACKAGE}" && \
     echo "CAMERA_SUITE_INCLUDE_PATH is ${CAMERA_SUITE_INCLUDE_PATH}" && \
-    cd ${PROJECT_RESOURCE_PATH}/librealsense2 \
+    cd ${PROJECT_RESOURCE_PATH}/framos \
     && mkdir artifacts \
     && mkdir build \
     && cd build \
@@ -102,6 +103,6 @@ RUN echo "CAMERA_SUITE_PACKAGE is ${CAMERA_SUITE_PACKAGE}" && \
         -DCMAKE_BUILD_TYPE=Release \
         -DFORCE_RSUSB_BACKEND=false \
         -DCHECK_FOR_UPDATES=OFF \
-        -DCMAKE_INSTALL_PREFIX="${PROJECT_RESOURCE_PATH}/librealsense2/artifacts" \
+        -DCMAKE_INSTALL_PREFIX="${PROJECT_RESOURCE_PATH}/framos/artifacts" \
     && make -j2 \
     && make install
